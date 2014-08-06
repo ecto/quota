@@ -1,0 +1,34 @@
+{
+  "name": "quota",
+  "version": "0.0.0",
+  "description": "Simple rate limiting",
+  "main": "quota.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "./node_modules/nodeunit/bin/nodeunit test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/ecto/quota.git"
+  },
+  "keywords": [
+    "rate",
+    "limit",
+    "ratelimit",
+    "quota"
+  ],
+  "author": "Cam Pedersen",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ecto/quota/issues"
+  },
+  "homepage": "https://github.com/ecto/quota",
+  "devDependencies": {
+    "express": "^4.7.4",
+    "nodeunit": "^0.9.0",
+    "redis": "^0.11.0",
+    "request": "^2.39.0"
+  }
+}
