@@ -1,3 +1,8 @@
+/*
+ * I'm sure there's a better way to test this...
+ * I couldn't figure out an easier way to code it
+ */
+
 var Quota = require('../');
 
 var redis = require('redis');
@@ -17,19 +22,51 @@ app.get('/', ratelimit, function(req, res){
   });
 });
 
-exports['foo'] = function (test) {
-  test.equal('foo', 'foo');
+exports['should allow default 20 hits through'] = function (test) {
+  var successes = 0;
+  resetRedis();
 
-  setInterval(function () {
-    request(url, function (err, res, body) {
-      console.log(body);
+  var interval = setInterval(function () {
+    request({
+      url: url,
+      json: true
+    }, function (err, res, body) {
+      if (body.success === true) {
+        successes++;
+      } else {
+        test.equal(successes, 20);
+        clearInterval(interval);
+        test.done();
+      }
     });
-  }, 100);
+  }, 10);
+};
+
+exports['should reallow connections after 60 seconds'] = function (test) {
+  console.log('please wait 60 seconds for default window to be tested...');
 
   setTimeout(function () {
-    // cleanup
-    test.end();
-    server.close();
-    client.end();
-  }, 5000);
+    request({
+      url: url,
+      json: true
+    }, function (err, res, body) {
+      test.equal(body.success, true);
+      test.done();
+      done();
+    });
+  }, 60000);
+};
+
+function done () {
+  server.close();
+  client.end();
+}
+
+function resetRedis () {
+  client.flushall(function (err) {
+    if (err) {
+      console.log(err);
+      process.exit(1);
+    }
+  });
 };

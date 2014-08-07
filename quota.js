@@ -1,3 +1,4 @@
+var async = require('async');
 var crypto = require('crypto');
 
 var defaults = {
@@ -24,72 +25,86 @@ var Quota = module.exports = function (options) {
 };
 
 Quota.prototype.process = function (req, res, next) {
+  var that = this;
   var ip = req.ip;
   var route = req.route.path;
-
-  var hash = crypto.createHash('sha256').update(ip);
-
-  if (this.perRoute) {
-    hash.update(route);
-  }
-
-  hash = hash.digest('hex');
-
-  var that = this;
   var now = +new Date();
+  var hashMaterial = this.perRoute ? (ip + route) : ip;
+  var hash = makeHash(hashMaterial);
   var key = this.keyPrefix + hash;
 
-  // get the count,
-  // or initialize it
-  that.client.get(key, function (err, count) {
+  async.waterfall([
+    function getCount (cb) {
+      that.client.get(key, function (err, count) {
+        if (err) {
+          return cb(err);
+        }
+
+        if (!count) {
+          count = 0;
+        } else {
+          count = parseInt(count);
+        }
+
+        cb(null, count);
+      });
+    },
+
+    function incrementCount (count, cb) {
+      count += 1;
+
+      cb(null, count);
+    },
+    
+    function getTTL (count, cb) {
+      that.client.pttl(key, function (err, ttl) {
+        if (err) {
+          return cb(err);
+        }
+
+        if (ttl < 0) {
+          ttl = that.window * 1000;
+        }
+
+        cb(null, count, ttl);
+      });
+    },
+
+    function updateRecord (count, ttl, cb) {
+      that.client.psetex(key, ttl, count, function (err) {
+        if (err) {
+          return cb(err);
+        }
+
+        cb(null, count, ttl);
+      });
+    },
+
+    function injectHeaders (count, ttl, cb) {
+      if (!that.injectHeaders) {
+        return cb(null, count, ttl);
+      }
+
+      cb(null, count, ttl);
+    }
+  ], function (err, count, ttl) {
     if (err) {
       throw err;
     }
 
-    if (!count) {
-      count = 0;
-    } else {
-      count = parseInt(count);
+    if (count > that.cap) {
+      return res.send({
+        success: false,
+        error: that.limitError
+      });
     }
 
-    // increment the count
-    count += 1;
-
-    // get the ttl,
-    // or initialize it
-    that.client.pttl(key, function (err, ttl) {
-      if (err) {
-        throw err;
-      }
-
-      if (ttl < 0) {
-        ttl = that.window * 1000;
-      }
-
-      // set the count,
-      // and the latest ttl
-      that.client.psetex(key, ttl, count, function (err) {
-        if (err) {
-          throw err;
-        }
-
-        if (that.injectHeaders) {
-
-        }
-
-        if (count > that.cap) {
-          if (err) {
-            throw err;
-          }
-
-          return res.send({
-            success: false,
-            error: that.limitError
-          });
-        }
-
-        next();
-      });
-    });
+    next();
   });
 };
+
+function makeHash (input) {
+  var hash = crypto.createHash('sha256').update(input);
+  hash = hash.digest('hex');
+  return hash;
+}
